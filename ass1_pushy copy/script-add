@@ -1,0 +1,21 @@
+#!/bin/dash
+
+mainDir=".script"
+branchDir="$mainDir/branches"
+branchLogFile="$mainDir/branchLogs.txt"
+currBranch="$branchDir/master"
+. helper
+
+getCurrBranch
+
+#Whenever we call script-branch before commit
+earlyBranchError
+
+#Empty-case see helper
+setBranchEmpty "$@"
+
+#-d case see helper
+setBranchDelete "$@"
+
+#Normal-case see helper
+setBranchNormal "$@"

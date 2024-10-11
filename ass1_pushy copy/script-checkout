@@ -1,0 +1,51 @@
+#!/bin/dash
+
+if [ $# -eq 0 ]; then
+    echo "usage: script-checkout <branch>"
+    exit 1
+fi
+
+mainDir=".script"
+branchesDir="$mainDir/branches"
+branchLogFile="$mainDir/branchLogs.txt"
+currDir="."
+. helper
+
+earlyBranchError
+
+#Initialising 
+branchName="$1"
+currBranch="$branchesDir/$branchName"
+
+if [ -d "$currBranch" ]; then
+    #Get previous branchname as currBranch name is the checkout Branch
+    prevBranchName=$(cat "$branchLogFile")
+    prevBranchDir="$branchesDir/$prevBranchName"
+    #Edge case for checking out to same branch
+    if [ "$prevBranchName" = "$branchName" ]; then
+        echo "Switched to branch '$branchName'"
+        exit 0
+    fi
+    #Edge case for prev and curr Branch being the exact same
+    if diff -rq "$prevBranchDir" "$currBranch" > /dev/null 2>&1; then
+        basename "$branchName" > "$branchLogFile"
+        echo "Switched to branch '$branchName'"
+        exit 0
+    fi
+    #Removing all the prevBranchFiles from working directory
+    for file in "$prevBranchDir"/*; do
+        if [ -f "$currDir/$(basename "$file")" ]; then
+            rm "$currDir/$(basename "$file")"
+        fi
+    done
+    #Copying checkout Branch's files to working directory
+    for file in "$currBranch"/*; do
+        cp "$file" "$currDir" >/dev/null 2>&1
+    done
+    #Updating branchLogs
+    basename "$branchName" > "$branchLogFile"
+    echo "Switched to branch '$branchName'"
+else
+    echo "script-checkout: error: unknown branch '$branchName'"
+    exit 1
+fi

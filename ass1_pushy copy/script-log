@@ -1,0 +1,6 @@
+#!/bin/dash
+
+mainDir=".script"
+logFile="$mainDir/logs.txt"
+
+tac "$logFile"

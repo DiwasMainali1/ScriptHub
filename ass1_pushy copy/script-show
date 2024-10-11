@@ -1,0 +1,35 @@
+#!/bin/dash
+
+if [ $# -eq 0 ]; then
+    echo "usage: script-show <commit>:<filename>"
+    exit 1
+fi
+
+mainDir=".script"
+
+#Cutting out the key values from commandLine
+commandLine=$*
+commitNum=$(echo "$commandLine" | cut -d ':' -f 1)
+commitFile=$(echo "$commandLine" | cut -d ':' -f 2)
+
+#Empty-case which shows from index
+if [ -z "$commitNum" ]; then
+    if [ ! -f "$mainDir/index/$commitFile" ]; then
+        echo "script-show: error: '$commitFile' not found in index"
+        exit 1
+    fi
+    cat "$mainDir/index/$commitFile" 
+    exit 0
+fi
+#Edge cases
+if [ ! -d "$mainDir/$commitNum" ]; then
+    echo "script-show: error: unknown commit '$commitNum'"
+    exit 1
+fi
+if [ ! -f "$mainDir/$commitNum/$commitFile" ]; then
+    echo "script-show: error: '$commitFile' not found in commit $commitNum"
+    exit 1
+fi
+
+#Prints out content of the given commit and file
+cat "$mainDir/$commitNum/$commitFile"

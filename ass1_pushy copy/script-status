@@ -1,0 +1,73 @@
+#!/bin/dash
+
+mainDir=".script"
+indexDir="$mainDir/index"
+branchDir="$mainDir/branches"
+branchLogFile="$mainDir/branchLogs.txt"
+statusDir="$mainDir/status"
+logFile="$mainDir/logs.txt"
+currDir="."
+. helper
+
+#Set commitDir to either latest branch if it exists or latest commit folder
+getandSetCommitDir
+#Create a statusDir which tracks files present in working directory
+createStatusDir
+for file in "$currDir"/*; do
+    #Edge case due to '*' appearing as a file
+    [ -e "$file" ] || continue
+
+    #File is present in both commit and working directory but not in index
+    if [ -f "$file" ] && [ -f "$commitDir/$file" ] && [ ! -f "$indexDir/$file" ]; then
+        statDeletedFromIndex "$statusDir/$file"
+        continue
+    fi
+    #File is present in working directory but not in index and commitDir
+    if [ -f "$file" ] && [ ! -f "$indexDir/$file" ] && [ ! -f "$commitDir/$file" ]; then
+        statUntrack "$statusDir/$file"
+        continue
+    fi
+    #File is present in index directory but not committed
+    if [ -f "$indexDir/$file" ] && [ ! -f "$mainDir/$file" ] && [ ! -f "$commitDir/$file" ]; then
+        #If current dir file is changed and else
+        if cmp -s "$file" "$indexDir/$file"; then
+            statAddedtoIndex "$statusDir/$file"
+        else
+            statIndexChange "$statusDir/$file"
+        fi
+        continue
+    fi
+    #File's change and deletion from index causes this message
+    if [ -f "$file" ] && [ ! -f "$indexDir/$file" ] && [ ! -f "$commitDir/$file" ]; then
+        statCommitnotStaged "$statusDir/$file"
+        continue
+    fi
+    #File having same content as commitFile 
+    if cmp -s "$file" "$commitDir/$file"; then
+        statFileSame "$statusDir/$file"
+        continue
+    fi
+    #File having changes in working dir but not in index & commitDir
+    if ! cmp -s "$file" "$indexDir/$file" && cmp -s "$commitDir/$file" "$indexDir/$file"; then
+        statCommitnotStaged "$statusDir/$file"
+        continue
+    fi
+    #File in workingDir and index being the same but index not committed
+    if cmp -s "$file" "$indexDir/$file" && ! cmp -s "$commitDir/$file" "$indexDir/$file"; then
+        statCommitStaged "$statusDir/$file"
+        continue
+    fi
+    #File in workingDir being different to indexDir and indexFile being different to commitDir
+    if ! cmp -s "$file" "$indexDir/$file" && ! cmp -s "$commitDir/$file" "$indexDir/$file"; then
+        statCommitDifference "$statusDir/$file"
+        continue
+    fi
+done
+
+#See helper
+checkIndexStatus
+cleanUpStatus
+checkCommitStatus
+
+#Simply printing out statusLogs for each file
+displayStatus

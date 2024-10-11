@@ -1,0 +1,484 @@
+#!/bin/dash
+
+mainDir=".script"
+indexDir="$mainDir/index"
+branchDir="$mainDir/branches"
+logFile="$mainDir/logs.txt"
+branchLogFile="$mainDir/branchLogs.txt"
+statusDir="$mainDir/status"
+readyToCommit=0
+currBranch="$branchDir/master"
+
+###[ script-add helper functions ]###
+repoExists() {
+    if [ ! -d "$mainDir" ]; then
+       echo "script-add: error: script repository directory .script not found"
+       exit 1
+    fi
+}
+
+createIndexDir() {
+    if [ ! -d "$indexDir" ]; then
+        mkdir "$indexDir"
+    fi
+}
+
+getCommitDir() {
+    if [ -f "$logFile" ]; then
+        commitNum=$(tail -n 1 "$logFile" | cut -d ' ' -f 1)
+        echo "$mainDir/$commitNum"
+    fi
+}
+
+isFileinCommit() {
+    file="$1"
+    commitDir="$2"
+    if [ -f "$commitDir/$file" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+#Function for updating indexFile to file if it exists
+#if not then copying file to directory
+updateIndexFile() {
+    file="$1"
+    indexFile="$indexDir/$(basename "$file")"
+    
+    if [ -f "$indexFile" ]; then
+        if ! cmp -s "$file" "$indexFile"; then
+            cp "$file" "$indexDir"
+        fi
+    else
+        cp "$file" "$indexDir"
+    fi 
+}
+
+deleteIndexFile() {
+    file="$1"
+    rm "$indexDir/$file"
+}
+
+checkFileExists() {
+    file="$1"
+    if [ ! -f "$file" ]; then
+       echo "script-add: error: can not open '$file'"
+    fi
+}
+
+
+###[ script-commit helper functions ]###
+createLogFile() {
+    if [ ! -f "$logFile" ]; then
+        touch "$logFile"
+    fi
+}
+
+setBranch() {
+    if [ ! -d "$branchDir" ]; then
+        mkdir "$branchDir"
+        mkdir "$branchDir/master"
+        currBranch="$branchDir/master"
+    fi
+}
+#Get currBranch from branchLogs
+setBranchLogs() {
+    if [ ! -f "$branchLogFile" ]; then
+        touch "$branchLogFile"
+        basename "$currBranch" > "$branchLogFile"
+    else
+        currBranch=$branchDir/$(cat "$branchLogFile")
+    fi
+}
+
+#Looks at current directory and if both index and file
+#exist with file being newly updated then it replaces the indexFile
+setCommitA() {
+    if [ "$1" = '-a' ]; then
+        for file in *; do
+            if [ -f "$file" ] && [ -f "$indexDir/$file" ]; then
+                if [ "$file" -nt "$indexDir/$file" ]; then
+                    cp "$file" "$indexDir/$file"
+                    commitMessage="$3"
+                fi
+            fi
+        done
+    fi
+}
+
+getCommitNum() {
+    if [ -s "$logFile" ]; then
+        prevCommitNum=$(tail -n 1 "$logFile" | cut -d ' ' -f 1)
+        commitNum=$((prevCommitNum + 1))
+    else
+        commitNum=0
+    fi
+}
+
+#Checks whether you should commit or not
+checkReadyToCommit() {
+    prevCommitDir="$mainDir/$prevCommitNum"
+    readyToCommit=0
+
+    #When commit number is 0, this is your first commit so you commit
+    if [ "$commitNum" -gt 0 ]; then
+        #Checks if file already exists in commitDir and if
+        #file is the same or not
+        for file in "$indexDir"/*; do
+            commitDirFile="$prevCommitDir/$(basename "$file")"
+            if [ ! -f "$commitDirFile" ] || ! cmp -s "$file" "$commitDirFile"; then
+                readyToCommit=1
+                break
+            fi
+        done
+        #File removal when file is absent from previous commitDir -
+        # and indexDir
+        for file in "$prevCommitDir"/*; do
+            indexDirFile="$indexDir/$(basename "$file")"
+            mainDirFile="$mainDir/$(basename "$file")"
+            if [ ! -f "$indexDirFile" ] && [ -f "$mainDirFile" ]; then
+                rm "$mainDirFile"
+                readyToCommit=1
+            fi
+        done
+    else
+        readyToCommit=1
+    fi
+    export readyToCommit
+}
+
+freeBranch() {
+    for file in "$currBranch"/*; do
+        if [ -f "$file" ]; then
+            rm "$file"
+        fi
+    done
+}
+
+#If both index and prevCommit is empty, there's nothing to commit
+checkEmptyIndexAndPrevCommit() {
+    indexFileCount=$(find "$indexDir" -maxdepth 1 -type f | wc -l)
+    prevCommitFileCount=$(find "$prevCommitDir" -maxdepth 1 -type f | wc -l)
+    if [ "$indexFileCount" -eq 0 ] && [ "$prevCommitFileCount" -eq 0 ]; then
+        echo "nothing to commit"
+        exit 0
+    fi
+}
+
+setCommitDir() {
+    commitDir="$mainDir/$commitNum"
+    mkdir "$commitDir"
+}
+
+#When index is empty, you delete the file and commit
+commitEmptyIndex() {
+    if [ "$indexFileCount" -eq 0 ]; then
+        for file in "$prevCommitDir"/*; do
+            if [ -f "$mainDir/$file" ]; then
+                rm "$mainDir/$file"
+            fi
+        done
+        echo "Committed as commit $commitNum"
+        echo "$commitNum $commitMessage" >> "$logFile"
+        exit 0
+    fi
+}
+
+copyFiles() {
+    cp "$indexDir"/* "$commitDir"
+    cp "$indexDir"/* "$mainDir"
+    cp "$indexDir"/* "$currBranch"
+}
+
+logCommit() {
+    echo "Committed as commit $commitNum"
+    echo "$commitNum $commitMessage" >> "$logFile"
+}
+
+###[ script-rm helper functions ]###
+errorNotInRepo() {
+    echo "script-rm: error: '""$1""' is not in the script repository"
+    exit 1
+}
+
+errorIndexDiff() {
+    echo "script-rm: error: '""$1""' in index is different to both the working file and the repository"
+    exit 1
+}
+
+errorStagedChanges() {
+    echo "script-rm: error: '""$1""' has staged changes in the index"
+    exit 1
+}
+
+errorRepoDiff() {
+    echo "script-rm: error: '""$1""' in the repository is different to the working file"
+    exit 1
+}
+setForceandCached() {
+    shift 2
+    for file in "$@"; do
+        if [ -f "$indexDir/$file" ]; then
+            rm "$indexDir/$file" >/dev/null 2>&1
+        else
+            errorNotInRepo "$file"
+        fi
+    done
+}
+
+setCached() {
+    #shift by one while scanning to ignore "-cached"
+    shift
+    for file in "$@"; do
+        if [ -f "$mainDir/$file" ]; then
+            #File in working dir is different to index and repo file
+            if ! cmp -s "$file" "$indexDir/$file" && ! cmp -s "$mainDir/$file" "$indexDir/$file"; then
+                errorIndexDiff "$file"
+            fi
+            #removing index and repo file
+            rm "$indexDir/$file"
+            rm "$mainDir/$file"
+        #if mainDir file doesn't exist simply remove indexFile
+        elif [ -f "$indexDir/$file" ]; then
+            rm "$indexDir/$file"
+        else
+            errorNotInRepo "$file"
+        fi
+    done
+}
+
+setForce() {
+    shift
+    for file in "$@"; do
+        #Forcefully removing the file everywhere and ignoring errors
+        if [ -f "$mainDir/$file" ] || [ -f "$indexDir/$file" ]; then
+            rm "$indexDir/$file" >/dev/null 2>&1
+            rm "$mainDir/$file" >/dev/null 2>&1
+            rm "$file" >/dev/null 2>&1
+            rm -f "$statusDir/$file"
+        else
+            errorNotInRepo "$file"
+        fi
+    done
+}
+
+setRemove() {
+    for file in "$@"; do
+        #File is not in repository or index
+        if [ ! -f "$mainDir/$file" ] && [ ! -f "$indexDir/$file" ]; then
+            errorNotInRepo "$file"
+        #File is not in repository but is in index
+        elif [ ! -f "$mainDir/$file" ] && [ -f "$indexDir/$file" ]; then
+            errorStagedChanges "$file"
+        #File is workingDir is different to repo but repoFile and indexFile is same
+        elif ! cmp -s "$file" "$mainDir/$file" && cmp -s "$mainDir/$file" "$indexDir/$file"; then
+            errorRepoDiff "$file"
+        #File is workingDir is different to index and index is different to repo file
+        elif ! cmp -s "$file" "$indexDir/$file" && ! cmp -s "$mainDir/$file" "$indexDir/$file"; then
+            errorIndexDiff "$file"
+        #File in workingDir is same as index but indexFile is different to repo  
+        elif cmp -s "$file" "$indexDir/$file" && ! cmp -s "$mainDir/$file" "$indexDir/$file"; then
+            errorStagedChanges "$file"
+        fi
+    done
+    #Removal
+    for file in "$@"; do
+        if [ -f "$mainDir/$file" ]; then
+            rm "$indexDir/$file"
+            rm "$mainDir/$file"
+            rm "$file"
+        fi
+    done
+}
+
+
+###[ script-status helper functions ]###
+
+#Setting status for all files in statusDir
+setStatus() {
+    file="$1"
+    status="$2"
+    filename=$(basename "$file" .txt)
+    echo "$filename - $status" > "$file"
+}
+
+statUntrack() {
+    file="$1"
+    setStatus "$file" "untracked"
+}
+
+statAddedtoIndex() {
+    file="$1"
+    setStatus "$file" "added to index"
+}
+
+statIndexChange() {
+    file="$1"
+    setStatus "$file" "added to index, file changed"
+}
+
+statIndexDeleted() {
+    file="$1"
+    setStatus "$file" "added to index, file deleted" 
+}
+
+statDeletedFromIndex() {
+    file="$1"
+    setStatus "$file" "deleted from index" 
+}
+
+statCommitDifference() {
+    file="$1"
+    setStatus "$file" "file changed, different changes staged for commit"   
+}
+
+statCommitStaged() {
+    file="$1"
+    setStatus "$file" "file changed, changes staged for commit"
+}
+
+statCommitnotStaged() {
+    file="$1"
+    setStatus "$file" "file changed, changes not staged for commit"
+}
+
+statFileDeleted() {
+    file="$1"
+    setStatus "$file" "file deleted"
+}
+
+statFileDeletedFromIndex() {
+    file="$1"
+    setStatus "$file" "file deleted, deleted from index"
+}
+
+statFileSame() {
+    file="$1"
+    setStatus "$file" "same as repo"   
+}
+
+#Set commit dir to latest branch and if not then latest commitDir
+getandSetCommitDir() {
+    commitDir="$mainDir"
+    if [ -f "$logFile" ]; then
+        commitNum=$(tail -n 1 "$logFile" | cut -d ' ' -f 1)
+        commitDir="$mainDir/$commitNum"
+    fi
+    if [ -d "$branchDir" ]; then
+        commitDir="$branchDir/$(cat "$branchLogFile")"
+    fi
+}
+
+createStatusDir() {
+    if [ ! -d "$statusDir" ]; then
+        mkdir "$statusDir"
+    fi
+}
+
+#Stating if deleted from index but is in statusDir
+checkIndexStatus() {
+    for file in "$indexDir"/*; do
+        [ -e "$file" ] || continue
+        currFile=$(basename "$file")
+        if [ ! -f "$currFile" ] && [ -f "$statusDir/$currFile" ]; then
+            statIndexDeleted "$statusDir/$currFile"
+        fi
+    done
+}
+
+#Deleting status file if file is untrackable
+cleanUpStatus() {
+    for file in "$statusDir"/*; do
+        [ -e "$file" ] || continue
+        currFile=$(basename "$file")
+        if [ ! -f "$currFile" ] && [ ! -f "$indexDir/$currFile" ] && [ ! -f "$commitDir/$currFile" ]; then
+            rm "$file" >/dev/null 2>&1
+        fi
+    done
+}
+
+#Stating if file exists only in working dir or in indexDir
+#but not commit
+checkCommitStatus() {
+    for file in "$commitDir"/*; do
+        [ -e "$file" ] || continue
+        currFile=$(basename "$file")
+        if [ ! -f "$currFile" ] && [ ! -f "$indexDir/$currFile" ]; then
+            statFileDeletedFromIndex "$statusDir/$currFile"
+        elif [ ! -f "$currFile" ] && [ -f "$indexDir/$currFile" ]; then
+            statFileDeleted "$statusDir/$currFile"
+        fi
+    done
+}
+
+displayStatus() {
+    for file in "$statusDir"/*; do
+        [ -e "$file" ] || continue
+        cat "$file"
+    done
+}
+
+
+###[ script-branch helper functions ]###
+getCurrBranch() {
+    if [ -f "$branchLogFile" ]; then
+        currBranch=$branchDir/$(cat "$branchLogFile")
+    fi
+}
+
+earlyBranchError() {
+    if [ ! -d "$branchDir" ]; then
+        echo "script-branch: error: this command can not be run until after the first commit"
+        exit 1
+    fi
+}
+
+#Empty commandline so printing all branches
+setBranchEmpty() {
+    if [ $# -eq 0 ]; then
+        for branch in "$branchDir"/*; do
+            if [ -d "$branch" ]; then
+                branchName=$(basename "$branch")
+                echo "$branchName"
+            fi
+        done
+        exit 0
+    fi
+}
+
+#Deleting Branches
+setBranchDelete() {
+    #Edge cases for branch being master or not existing
+    if [ "$1" = '-d' ] && [ $# -eq 2 ]; then
+        if [ "$2" = 'master' ]; then
+            echo "script-branch: error: can not delete branch 'master': default branch"
+            exit 1
+        fi
+        if [ -d "$branchDir/$2" ]; then
+            rm -r "${branchDir:?}/$2"
+        else
+            echo "script-branch: error: branch '$2' doesn't exist"
+            exit 1
+        fi
+        echo "Deleted branch '$2'"
+        exit 0
+    elif [ "$1" = '-d' ] && [ $# -eq 1 ]; then
+        echo "script-branch: error: branch name required"
+        exit 1
+    fi
+}
+#Creating a new branch and copying the currBranch to the new Branch
+setBranchNormal() {
+    branchName="$1"
+    if [ $# -eq 1 ]; then
+        newBranchDir="$branchDir/$branchName"
+        if [ -d "$newBranchDir" ]; then
+            echo "script-branch: error: branch '$branchName' already exists"
+            exit 1
+        fi
+        mkdir -p "$newBranchDir"
+        cp -r "$currBranch"/* "$newBranchDir" >/dev/null 2>&1
+    fi
+}
+

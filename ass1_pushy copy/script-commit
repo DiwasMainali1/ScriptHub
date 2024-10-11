@@ -1,0 +1,58 @@
+#!/bin/dash
+
+if [ $# -eq 0 ]; then
+    echo "usage: script-commit [-a] -m commit-message"
+    exit 1
+fi
+
+mainDir=".script"
+indexDir="$mainDir/index"
+branchDir="$mainDir/branches"
+logFile="$mainDir/logs.txt"
+branchLogFile="$mainDir/branchLogs.txt"
+currBranch=""
+commitMessage="$2"
+. helper
+
+#Check for repository not existing
+repoExists
+
+#Create log file if it doesn't exist
+createLogFile
+
+#Create and set branch to master upon first commit
+setBranch
+
+#Create a file called Branchlogs which will track current Branch
+setBranchLogs
+
+# -a option for commit
+setCommitA "$@"
+
+#Gets the latest committed folder number
+getCommitNum
+
+#long function - see helper
+checkReadyToCommit
+
+if [ "$readyToCommit" -eq 1 ]; then
+    #Empty the branch directory first
+    freeBranch
+
+    #If both index and prev commit are empty, nothing to commit
+    checkEmptyIndexAndPrevCommit
+
+    #Set new commit directory
+    setCommitDir
+
+    #Remove mainDir files when index is empty
+    commitEmptyIndex
+
+    #3 step copy, to commitDir, mainDir and latestBranch
+    copyFiles
+
+    #logFile update
+    logCommit
+else
+    echo "nothing to commit"
+fi
