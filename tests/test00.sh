@@ -1,4 +1,4 @@
-#pushy-init and pushy-add test
+#script-init and script-add test
 PATH="$PATH:$(pwd)"
 
 # Temp directory created for testing.
@@ -15,10 +15,10 @@ trap 'rm "$expected_output" "$actual_output" -rf "$test_dir"' INT HUP QUIT TERM 
 
 # 1) Creating repo successfully.
 cat > "$expectedOut" <<EOF
-Initialized empty pushy repository in .pushy
+Initialized empty script repository in .script
 EOF
 
-pushy-init > "$actualOut" 2>&1
+script-init > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -27,10 +27,10 @@ fi
 
 # 2) Edge-case for adding files. No input in command line
 cat > "$expectedOut" <<EOF
-usage: pushy-add <filenames>
+usage: script-add <filenames>
 EOF
 
-pushy-add > "$actualOut" 2>&1
+script-add > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -42,7 +42,7 @@ echo "line 1" > a
 cat > "$expectedOut" <<EOF
 EOF
 
-pushy-add a > "$actualOut" 2>&1
+script-add a > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"

@@ -1,4 +1,4 @@
-#pushy-init, pushy-add, pushy-commit and pushy-log test
+#script-init, script-add, script-commit and script-log test
 PATH="$PATH:$(pwd)"
 
 # Temp directory created for testing.
@@ -15,10 +15,10 @@ trap 'rm "$expected_output" "$actual_output" -rf "$test_dir"' INT HUP QUIT TERM 
 
 # 1) Creating repo successfully.
 cat > "$expectedOut" <<EOF
-Initialized empty pushy repository in .pushy
+Initialized empty script repository in .script
 EOF
 
-pushy-init > "$actualOut" 2>&1
+script-init > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -31,7 +31,7 @@ echo "line aa" > b
 cat > "$expectedOut" <<EOF
 EOF
 
-pushy-add a b > "$actualOut" 2>&1
+script-add a b > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -42,10 +42,10 @@ fi
 echo "line 1" > a
 echo "line aa" > b
 cat > "$expectedOut" <<EOF
-usage: pushy-commit [-a] -m commit-message
+usage: script-commit [-a] -m commit-message
 EOF
 
-pushy-commit > "$actualOut" 2>&1
+script-commit > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -58,8 +58,8 @@ echo "line aa" > b
 cat > "$expectedOut" <<EOF
 Committed as commit 0
 EOF
-pushy-add a b > "$actualOut" 2>&1
-pushy-commit -m "First One" > "$actualOut" 2>&1
+script-add a b > "$actualOut" 2>&1
+script-commit -m "First One" > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
@@ -71,7 +71,7 @@ cat > "$expectedOut" <<EOF
 0 First One
 EOF
 
-pushy-log > "$actualOut" 2>&1
+script-log > "$actualOut" 2>&1
 
 if ! diff "$expectedOut" "$actualOut"; then
     echo "Failed test"
